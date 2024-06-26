@@ -7,11 +7,24 @@ pipeline {
         disableConcurrentBuilds()  //  to not to run the code by other person at the same time.
         ansiColor('xterm') // terraform colours
     }
+    environment {
+        def appVersion = '' // variable declaration for whole code/ global and we left to access
+    }
     stages {
-        stage('test') {
+        stage ( 'read the vesrion') {
+            steps{
+                script {  // script to read definition def command
+                    def packageJSON = readJSON file: 'package.json'
+                    appVersion = packageJSON.vesrion  // we access variable value here 
+                    echo "application version: $appversion"  // we are printing the version
+        
+                }
+            }
+        }
+        stage('Install Dependencies') {
             steps {
                sh """
-                echo "this is testing"
+                npm install
                """
             }
         }
