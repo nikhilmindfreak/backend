@@ -54,6 +54,7 @@ pipeline {
                 """
             }
         }
+
         stage('Deploy'){
             steps{
                 sh """
@@ -63,6 +64,7 @@ pipeline {
                 """
             }
         }
+
         /* stage('Sonar Scan'){ // for sast and security scan
             environment {
                 scannerHome = tool 'sonar-6.0' //referring scanner CLI
@@ -105,7 +107,7 @@ pipeline {
                 
             }
         } */
-        stage('Deploy'){
+       /*  stage('Deploy'){
             when{  // calling the params
                 expression{
                     params.deploy
@@ -119,7 +121,7 @@ pipeline {
                     build job: 'backend-deploy', parameters: params, wait: false
                 }
             }
-        }
+        } */
     }
     post { 
         always { 
