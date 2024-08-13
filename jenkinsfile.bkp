@@ -1,0 +1,139 @@
+pipeline {
+    agent {
+        label 'AGENT-1' // our node
+    }
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()  //  to not to run the code by other person at the same time.
+        ansiColor('xterm') // terraform colours
+    }
+    parameters{
+        booleanParam(name: 'deploy', defaultValue: false, description: 'Toggle this value') // to deploy with our permession
+    }
+    environment {
+        def appVersion = '' // variable declaration for whole code/ global and we left to access
+        nexusUrl = 'nexus.devopsme.online:8081'
+        region = "us-east-1"
+        account_id = "851725263054"
+    }
+    stages {
+        stage( 'read the version') {
+            steps{
+                script {  // script to read definition def command
+                    def packageJson = readJSON file: 'package.json'
+                    appVersion = packageJson.version  // we access variable value here 
+                    echo "application version: $appVersion"  // we are printing the version
+                }
+            }
+        }
+        stage('Install Dependencies') {
+            steps {
+               sh """
+                npm install
+                ls -ltr 
+                echo "application version: $appVersion"
+               """
+            }
+        }
+        stage('Build') {
+            steps{
+                sh """
+                zip -q -r backend-${appVersion}.zip * -x Jenkinsfile -x backend-${appVersion}.zip
+                ls -ltr
+                """
+            }
+        }
+        stage('Docker build'){
+            steps{
+                sh """
+                    aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${account_id}.dkr.ecr.${region}.amazonaws.com
+
+                    docker build -t ${account_id}.dkr.ecr.${region}.amazonaws.com/expense-backend:${appVersion} .
+
+                    docker push ${account_id}.dkr.ecr.${region}.amazonaws.com/expense-backend:${appVersion}
+                """
+            }
+        }
+
+        stage('Deploy'){
+            steps{
+                sh """
+                    aws eks update-kubeconfig --region us-east-1 --name expense-dev
+                    cd helm
+                    sed -i 's/IMAGE_VERSION/${appVersion}/g' values.yaml
+                    helm upgrade backend .
+                """
+            }
+        }
+
+        /* stage('Sonar Scan'){ // for sast and security scan
+            environment {
+                scannerHome = tool 'sonar-6.0' //referring scanner CLI
+            }
+            steps {
+                script {
+                    withSonarQubeEnv('sonar-6.0') { //referring sonar server
+                        sh "${scannerHome}/bin/sonar-scanner"
+                    }
+                }
+            }
+        } */
+
+        /* stage("Quality Gate") {
+            steps {
+              timeout(time: 30, unit: 'MINUTES') {
+                waitForQualityGate abortPipeline: true  // asking jenkisn to wait untill it receives the report
+              }
+            }
+        }
+        stage('Nexus Artifact Upload') {
+            steps{
+                script{
+                    nexusArtifactUploader(
+                        nexusVersion: 'nexus3',
+                        protocol: 'http',
+                        nexusUrl: "${nexusUrl}",
+                        groupId: 'com.expense',
+                        version: "${appVersion}",
+                        repository: "backend",
+                        credentialsId: 'nexus-auth',
+                        artifacts: [
+                            [artifactId: "backend" ,
+                            classifier: '',
+                            file: "backend-" + "${appVersion}" + '.zip',
+                            type: 'zip']
+                        ]
+                    )
+                }
+                
+            }
+        } */
+       /*  stage('Deploy'){
+            when{  // calling the params
+                expression{
+                    params.deploy
+                }
+            }
+            steps{
+                script{
+                    def params = [
+                        string(name: 'appVersion', value: "${appVersion}")
+                    ]
+                    build job: 'backend-deploy', parameters: params, wait: false
+                }
+            }
+        } */
+    }
+    post { 
+        always { 
+            echo 'I will always say Hello again!'
+            deleteDir()   // to delete after build to avoid futher build anticipated errors
+        }
+        success { 
+            echo 'I will run when pipeline is success'
+        }
+        failure { 
+            echo 'I will run when pipeline is failure'
+        }
+    }
+}
